@@ -17,6 +17,7 @@ type App struct {
 	toggleTimer    chan bool
 	nextSession    chan bool
 	tick           chan bool
+	adjust         chan int
 	timerIsRunning bool
 	sessions       []Session
 	currSessionIdx int
@@ -27,6 +28,7 @@ func NewApp() *App {
 		toggleTimer:    make(chan bool),
 		nextSession:    make(chan bool),
 		tick:           make(chan bool),
+		adjust:         make(chan int),
 		timerIsRunning: false,
 		sessions: []Session{
 			{Icon: "🍅", InitialSeconds: 25 * 60},
@@ -91,6 +93,11 @@ func (app *App) run() {
 			app.timerIsRunning = false
 			seconds = app.NextSession()
 			app.print(seconds)
+		case s := <-app.adjust:
+			if seconds+s > 10 {
+				seconds += s
+			}
+			app.print(seconds)
 		case <-app.tick:
 			if app.timerIsRunning {
 				seconds--
@@ -124,6 +131,12 @@ func (app *App) handleExtCommand(conn net.Conn) {
 	case "next":
 		log.Println("Received next command")
 		app.nextSession <- true
+	case "more_time":
+		log.Println("Received more_time command")
+		app.adjust <- 60
+	case "less_time":
+		log.Println("Received less_time command")
+		app.adjust <- -60
 	default:
 		log.Printf("Received unknown command: %s", message)
 		conn.Write([]byte("Unknown command. Please use 'start' or 'stop'.\n"))
@@ -131,12 +144,6 @@ func (app *App) handleExtCommand(conn net.Conn) {
 }
 
 func main() {
-
-	// // Parse flags
-	// var durFlag = flag.String("d", "25m", "help message for flag n")
-	// flag.Parse()
-	// d, _ := time.ParseDuration(*durFlag)
-	// fmt.Println(d)
 
 	err := os.RemoveAll(socketPath)
 	if err != nil {
